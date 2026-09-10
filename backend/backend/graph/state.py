@@ -1,8 +1,10 @@
-from typing import TypedDict
+import operator
+from typing import Annotated, TypedDict
 
 
 class GraphState(TypedDict, total=False):
     user_input: str
+    transcript: Annotated[list[str], operator.add]
     pdf_text: str | None
     machine_id: str | None
     error_code: str | None

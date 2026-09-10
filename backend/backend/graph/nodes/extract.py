@@ -14,7 +14,12 @@ class ExtractedError(BaseModel):
 
 def make_extract_node(llm: LLMClient) -> Callable[[GraphState], dict]:
     def extract_node(state: GraphState) -> dict:
-        text = state["user_input"]
+        transcript = state.get("transcript")
+        if not transcript:
+            # Fall back to the single-turn input when no transcript has been
+            # accumulated yet (e.g. direct unit-test invocation).
+            transcript = [state["user_input"]] if state.get("user_input") else []
+        text = "\n".join(transcript)
         if state.get("pdf_text"):
             text = f"{text}\n\nError log:\n{state['pdf_text']}"
 
