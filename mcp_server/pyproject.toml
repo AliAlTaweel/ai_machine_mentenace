@@ -1,0 +1,17 @@
+[project]
+name = "mcp-inventory-server"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+    "mcp>=1.2.0",
+    "pymongo>=4.9",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "mongomock>=4.1",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
