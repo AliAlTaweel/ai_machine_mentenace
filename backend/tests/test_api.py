@@ -14,9 +14,9 @@ def make_blank_pdf_bytes() -> bytes:
     """A structurally valid PDF with no extractable text.
 
     pypdf's PdfWriter can't embed arbitrary text without a layout library, so
-    the upload tests verify a readable PDF yields an empty string (not an
-    error) — the behaviour the Extract node depends on — and that an
-    unreadable one yields a 400.
+    this stands in for a scanned/image-only PDF: parsing succeeds but yields
+    no text, which must be rejected with a 400 (no OCR fallback) rather than
+    silently flowing an empty description into the graph.
     """
     writer = PdfWriter()
     writer.add_blank_page(width=200, height=200)
@@ -29,7 +29,7 @@ def make_fake_collection(name: str):
     return mongomock.MongoClient()["machine_repair"][name]
 
 
-def test_upload_endpoint_returns_extracted_text():
+def test_upload_endpoint_returns_400_for_scanned_pdf_with_no_text():
     app = create_app(build_graph_fn=lambda *args, **kwargs: None)
     client = TestClient(app)
 
@@ -38,8 +38,8 @@ def test_upload_endpoint_returns_extracted_text():
         files={"file": ("log.pdf", make_blank_pdf_bytes(), "application/pdf")},
     )
 
-    assert response.status_code == 200
-    assert response.json() == {"extracted_text": ""}
+    assert response.status_code == 400
+    assert "detail" in response.json()
 
 
 def test_upload_endpoint_returns_400_for_unreadable_pdf():
@@ -101,6 +101,43 @@ def test_websocket_chat_forwards_pdf_text_to_the_graph(fake_llm):
         websocket.receive_json()
 
     assert "FAULT E101 AT SPINDLE" in llm.prompts[0]
+
+
+def test_websocket_chat_recovers_from_clarification_using_full_transcript(fake_llm):
+    """Turn 1 gives machine_id only; turn 2 gives just the error_code.
+
+    Extraction must succeed on turn 2 using BOTH turns' info — proving the
+    transcript channel (not the overwritten single-turn user_input) is what
+    extract_node reasons over. Before the fix, turn 2 would re-run extract
+    with only "E101" as input and ask for machine_id again (infinite
+    ping-pong).
+    """
+    llm = fake_llm(
+        structured_responses=[
+            ExtractedError(machine_id="CNC-Mill-200", error_code=None, description="needs error code"),
+            ExtractedError(machine_id="CNC-Mill-200", error_code="E101", description="grinding noise"),
+        ]
+    )
+    client = TestClient(make_app_with_real_graph(llm))
+
+    with client.websocket_connect("/ws/clarify-thread?backend=local") as websocket:
+        websocket.send_json({"type": "chat", "content": "CNC-Mill-200 is grinding"})
+        turn1_event = websocket.receive_json()
+
+        websocket.send_json({"type": "chat", "content": "E101"})
+        turn2_event = websocket.receive_json()
+
+    assert turn1_event["data"]["needs_clarification"] is True
+    assert "error code" in turn1_event["data"]["clarification_message"]
+
+    assert turn2_event["node"] == "extract"
+    assert turn2_event["data"]["needs_clarification"] is False
+    assert turn2_event["data"]["machine_id"] == "CNC-Mill-200"
+    assert turn2_event["data"]["error_code"] == "E101"
+
+    # The turn-2 extraction prompt must contain turn 1's original text, proving
+    # the full transcript (not just "E101") was used.
+    assert "CNC-Mill-200 is grinding" in llm.prompts[1]
 
 
 def test_websocket_streams_approval_request_and_resumes_on_approval(fake_llm):
@@ -183,6 +220,60 @@ def test_websocket_sends_error_event_when_graph_run_raises(fake_llm):
     assert error_event["type"] == "error"
     assert "MCP server unreachable" in error_event["message"]
     assert retry_event["type"] == "error"
+
+
+def test_websocket_sends_error_event_for_malformed_json(fake_llm):
+    llm = fake_llm(
+        structured_responses=[
+            ExtractedError(machine_id="CNC-Mill-200", error_code="E101", description="grinding noise")
+        ]
+    )
+    client = TestClient(make_app_with_real_graph(llm))
+
+    with client.websocket_connect("/ws/bad-json-thread?backend=local") as websocket:
+        websocket.send_text("not valid json{{{")
+        error_event = websocket.receive_json()
+
+        # The socket stays open for a subsequent valid message.
+        websocket.send_json({"type": "chat", "content": "CNC-Mill-200 throwing E101"})
+        retry_event = websocket.receive_json()
+
+    assert error_event["type"] == "error"
+    assert retry_event["type"] == "node_update"
+
+
+def test_websocket_sends_error_event_for_chat_message_missing_content(fake_llm):
+    client = TestClient(make_app_with_real_graph(fake_llm()))
+
+    with client.websocket_connect("/ws/missing-content-thread?backend=local") as websocket:
+        websocket.send_json({"type": "chat"})
+        error_event = websocket.receive_json()
+
+        # The socket stays open — it did not silently disconnect.
+        websocket.send_json({"type": "ping"})
+        websocket.send_json({"type": "chat", "content": "still alive"})
+        # Reaching here without an exception proves the socket is still open.
+
+    assert error_event["type"] == "error"
+
+
+def test_websocket_sends_error_event_and_closes_on_setup_failure():
+    def failing_llm_factory(backend_choice):
+        raise RuntimeError("ANTHROPIC_API_KEY is not set")
+
+    app = create_app(
+        build_graph_fn=lambda *args, **kwargs: None,
+        llm_factory=failing_llm_factory,
+        manuals_collection_factory=lambda: object(),
+        work_orders_collection_factory=lambda: object(),
+        checkpoint_client_factory=lambda: None,
+    )
+    client = TestClient(app)
+
+    with client.websocket_connect("/ws/setup-fail-thread?backend=cloud") as websocket:
+        error_event = websocket.receive_json()
+        assert error_event["type"] == "error"
+        assert "ANTHROPIC_API_KEY" in error_event["message"]
 
 
 def test_websocket_ignores_unknown_message_types(fake_llm):

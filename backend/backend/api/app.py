@@ -63,33 +63,60 @@ def create_app(
                     f"as text instead. ({exc})"
                 ),
             )
+        if not text.strip():
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "This PDF has no extractable text (scanned or image-only) — "
+                    "please paste the error description as text instead."
+                ),
+            )
         return {"extracted_text": text}
 
     @app.websocket("/ws/{thread_id}")
     async def websocket_chat(websocket: WebSocket, thread_id: str, backend: str = "local"):
         await websocket.accept()
 
-        llm = llm_factory(backend)
-        graph = build_graph_fn(
-            llm,
-            manuals_collection_factory(),
-            work_orders_collection_factory(),
-            make_checkpointer(checkpoint_client_factory()),
-        )
+        try:
+            llm = llm_factory(backend)
+            graph = build_graph_fn(
+                llm,
+                manuals_collection_factory(),
+                work_orders_collection_factory(),
+                make_checkpointer(checkpoint_client_factory()),
+            )
+        except Exception as exc:
+            # Setup failure (unset MONGODB_URI, missing API key, etc.) is
+            # unrecoverable for this connection — tell the client why, then
+            # close rather than leaving it hanging.
+            await websocket.send_json({"type": "error", "message": str(exc)})
+            await websocket.close()
+            return
+
         config = {"configurable": {"thread_id": thread_id}}
 
         try:
             while True:
-                message = json.loads(await websocket.receive_text())
+                raw = await websocket.receive_text()
 
-                if message["type"] == "chat":
-                    graph_input = {
-                        "user_input": message["content"],
-                        "pdf_text": message.get("pdf_text"),
-                    }
-                elif message["type"] == "approval":
-                    graph_input = Command(resume=message["decision"])
-                else:
+                try:
+                    message = json.loads(raw)
+
+                    if message["type"] == "chat":
+                        graph_input = {
+                            "user_input": message["content"],
+                            "transcript": [message["content"]],
+                            "pdf_text": message.get("pdf_text"),
+                        }
+                    elif message["type"] == "approval":
+                        graph_input = Command(resume=message["decision"])
+                    else:
+                        continue
+                except Exception as exc:
+                    # Malformed JSON or a message missing required keys.
+                    # Report it and keep the socket open for a retry rather
+                    # than letting the exception kill the connection.
+                    await websocket.send_json({"type": "error", "message": str(exc)})
                     continue
 
                 try:
