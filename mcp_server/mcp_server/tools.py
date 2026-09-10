@@ -31,3 +31,13 @@ def check_stock(collection, part_id: str) -> PartStatus:
         reorder_threshold=threshold,
         status=status,
     )
+
+
+def reserve_parts(collection, part_id: str, quantity: int) -> dict:
+    doc = collection.find_one({"part_id": part_id})
+    if doc is None:
+        raise ValueError(f"Unknown part_id: {part_id}")
+
+    new_qty = max(doc["qty_on_hand"] - quantity, 0)
+    collection.update_one({"part_id": part_id}, {"$set": {"qty_on_hand": new_qty}})
+    return {"part_id": part_id, "qty_on_hand": new_qty}

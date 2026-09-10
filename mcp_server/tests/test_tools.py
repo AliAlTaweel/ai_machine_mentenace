@@ -1,6 +1,6 @@
 import pytest
 
-from mcp_server.tools import check_stock
+from mcp_server.tools import check_stock, reserve_parts
 
 
 def test_check_stock_in_stock(inventory_collection):
@@ -23,3 +23,18 @@ def test_check_stock_out_of_stock(inventory_collection):
 def test_check_stock_unknown_part_raises(inventory_collection):
     with pytest.raises(ValueError, match="Unknown part_id"):
         check_stock(inventory_collection, "NOPE-1")
+
+
+def test_reserve_parts_decrements_stock(inventory_collection):
+    result = reserve_parts(inventory_collection, "BEARING-X4", 3)
+    assert result == {"part_id": "BEARING-X4", "qty_on_hand": 9}
+
+
+def test_reserve_parts_floors_at_zero(inventory_collection):
+    result = reserve_parts(inventory_collection, "BELT-A7", 10)
+    assert result == {"part_id": "BELT-A7", "qty_on_hand": 0}
+
+
+def test_reserve_parts_unknown_part_raises(inventory_collection):
+    with pytest.raises(ValueError, match="Unknown part_id"):
+        reserve_parts(inventory_collection, "NOPE-1", 1)
