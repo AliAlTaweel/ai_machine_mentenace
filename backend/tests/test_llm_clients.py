@@ -101,3 +101,33 @@ def test_claude_generate_structured_returns_parsed_output(monkeypatch):
     )
     result = client.generate_structured("describe a person", Person)
     assert result == expected
+
+
+def test_claude_generate_structured_retries_once_when_parsed_output_is_none(monkeypatch):
+    """The SDK can return parsed_output=None (refusal/truncation) without
+    raising. That must trigger the same retry-once behaviour as a schema
+    validation failure, not silently return None to the caller."""
+    client = ClaudeClient(model="claude-sonnet-5", api_key="test-key")
+    expected = Person(name="Ada", age=30)
+    responses = [
+        FakeClaudeParsedMessage(None),
+        FakeClaudeParsedMessage(expected),
+    ]
+
+    def fake_parse(**kwargs):
+        return responses.pop(0)
+
+    monkeypatch.setattr(client._client.beta.messages, "parse", fake_parse)
+    result = client.generate_structured("describe a person", Person)
+    assert result == expected
+
+
+def test_claude_generate_structured_raises_clear_error_after_second_none(monkeypatch):
+    client = ClaudeClient(model="claude-sonnet-5", api_key="test-key")
+    monkeypatch.setattr(
+        client._client.beta.messages,
+        "parse",
+        lambda **kwargs: FakeClaudeParsedMessage(None),
+    )
+    with pytest.raises(ValueError):
+        client.generate_structured("describe a person", Person)
