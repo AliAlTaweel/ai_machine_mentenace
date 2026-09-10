@@ -12,6 +12,7 @@ dependencies = [
     "pydantic>=2.7",
     "pymongo>=4.9",
     "sentence-transformers>=3.0",
+    "mcp>=1.2.0,<2.0",
 ]
 
 [project.optional-dependencies]
