@@ -11,6 +11,7 @@ dependencies = [
     "anthropic>=0.40",
     "pydantic>=2.7",
     "pymongo>=4.9",
+    "sentence-transformers>=3.0",
 ]
 
 [project.optional-dependencies]
