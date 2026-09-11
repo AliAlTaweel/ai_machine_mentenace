@@ -107,6 +107,10 @@ seed_manuals(get_manuals_collection())
 
 Runs at `http://localhost:8000`. Exposes:
 - `POST /upload` — PDF upload, returns extracted text
+- `POST /manuals/upload` — upload a technical manual PDF (with
+  `machine_type`/`error_codes` form fields); chunks, embeds, and inserts
+  it into the searchable knowledge base
+- `GET /manuals` — list previously-uploaded manuals
 - `WS /ws/{thread_id}?backend=local|cloud` — chat session (`local` = Ollama, `cloud` = Claude)
 
 ### 3. Frontend (Phase 3)
@@ -118,7 +122,7 @@ npm test    # run tests
 npm run dev
 ```
 
-Vite's dev server proxies `/upload` and `/ws` to `http://localhost:8000` —
+Vite's dev server proxies `/upload`, `/manuals`, and `/ws` to `http://localhost:8000` —
 start the backend first. Open the printed local URL, click **Start
 Session**, and chat.
 
@@ -168,6 +172,8 @@ the suites above locally before pushing.
 
 Explicitly out of scope for this demo (see the design spec for the full
 list): auth/authorization, multi-tenant roles, horizontal scaling, OCR for
-scanned PDFs, real technical manuals or a real inventory system (both are
-synthetic seed data), and a separate supervisor login (the same chat
+scanned PDFs, a real inventory system (synthetic seed data) — technical
+manuals can now be supplemented with real uploads via the "Manage
+Manuals" panel, though the seeded set remains synthetic — and a separate
+supervisor login (the same chat
 session shows the approval card inline).

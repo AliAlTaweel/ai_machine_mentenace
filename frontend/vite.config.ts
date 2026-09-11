@@ -7,6 +7,7 @@ export default defineConfig({
   server: {
     proxy: {
       '/upload': 'http://localhost:8000',
+      '/manuals': 'http://localhost:8000',
       '/ws': {
         target: 'ws://localhost:8000',
         ws: true,

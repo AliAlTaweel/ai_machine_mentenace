@@ -20,9 +20,17 @@ export function ManualsPanel({ onClose }: ManualsPanelProps) {
   const [uploading, setUploading] = useState(false);
 
   const fetchManuals = async () => {
-    const response = await fetch('/manuals');
-    const data = await response.json();
-    setManuals(data);
+    try {
+      const response = await fetch('/manuals');
+      if (!response.ok) {
+        setStatus('Could not load the manuals list.');
+        return;
+      }
+      const data = await response.json();
+      setManuals(data);
+    } catch {
+      setStatus('Could not reach the server to load the manuals list.');
+    }
   };
 
   useEffect(() => {
@@ -77,12 +85,16 @@ export function ManualsPanel({ onClose }: ManualsPanelProps) {
           data-testid="manuals-list"
           className="mt-3 max-h-40 space-y-1 overflow-y-auto text-sm"
         >
-          {manuals.map((manual) => (
-            <li key={manual.filename}>
-              {manual.filename} — {manual.machine_type} ({manual.error_codes.join(', ')},{' '}
-              {manual.chunk_count} chunks)
-            </li>
-          ))}
+          {manuals.length === 0 ? (
+            <li className="text-gray-400">No manuals uploaded yet.</li>
+          ) : (
+            manuals.map((manual) => (
+              <li key={manual.filename}>
+                {manual.filename} — {manual.machine_type} ({manual.error_codes.join(', ')},{' '}
+                {manual.chunk_count} chunks)
+              </li>
+            ))
+          )}
         </ul>
 
         <form onSubmit={handleSubmit} className="mt-4 space-y-2" noValidate>
@@ -106,7 +118,6 @@ export function ManualsPanel({ onClose }: ManualsPanelProps) {
             placeholder="Error codes (comma-separated)"
             value={errorCodes}
             onChange={(event) => setErrorCodes(event.target.value)}
-            required
             className="w-full rounded border px-2 py-1 text-sm"
           />
           <button
@@ -119,7 +130,7 @@ export function ManualsPanel({ onClose }: ManualsPanelProps) {
         </form>
 
         {status && (
-          <p data-testid="manuals-status" className="mt-2 text-xs text-gray-600">
+          <p data-testid="manuals-status" role="status" className="mt-2 text-xs text-gray-600">
             {status}
           </p>
         )}
