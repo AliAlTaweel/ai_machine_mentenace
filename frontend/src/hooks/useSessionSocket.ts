@@ -13,15 +13,34 @@ export function useSessionSocket(
   const socketRef = useRef<WebSocket | null>(null);
 
   useEffect(() => {
+    useSessionStore.getState().setConnectionStatus('connecting');
+
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const url = `${protocol}//${window.location.host}/ws/${threadId}?backend=${backend}`;
     const socket = new WebSocket(url);
     socketRef.current = socket;
 
-    socket.onopen = () => useSessionStore.getState().setConnectionStatus('open');
-    socket.onclose = () => useSessionStore.getState().setConnectionStatus('closed');
-    socket.onerror = () => useSessionStore.getState().setConnectionStatus('error');
+    // Guards against a stale socket (StrictMode double-mount, or a
+    // threadId/backend change) clobbering the current socket's status.
+    const isCurrent = () => socketRef.current === socket;
+
+    socket.onopen = () => {
+      if (isCurrent()) useSessionStore.getState().setConnectionStatus('open');
+    };
+    socket.onclose = () => {
+      if (!isCurrent()) return;
+      useSessionStore.getState().setConnectionStatus('closed');
+      useSessionStore
+        .getState()
+        .addSystemMessage('Connection closed — reload the page to start a new session.');
+    };
+    socket.onerror = () => {
+      if (!isCurrent()) return;
+      useSessionStore.getState().setConnectionStatus('error');
+      useSessionStore.getState().addSystemMessage('Connection error.');
+    };
     socket.onmessage = (event) => {
+      if (!isCurrent()) return;
       let parsed: ServerEvent;
       try {
         parsed = JSON.parse(event.data);
@@ -38,7 +57,13 @@ export function useSessionSocket(
       useSessionStore.getState().handleServerEvent(parsed);
     };
 
-    return () => socket.close();
+    return () => {
+      socket.onopen = null;
+      socket.onclose = null;
+      socket.onerror = null;
+      socket.onmessage = null;
+      socket.close();
+    };
   }, [threadId, backend]);
 
   const sendChat = (content: string, pdfText?: string) => {
@@ -48,7 +73,10 @@ export function useSessionSocket(
 
   const sendApproval = (decision: 'approve' | 'reject') => {
     useSessionStore.getState().setApprovalDecision(decision);
-    socketRef.current?.send(JSON.stringify({ type: 'approval', decision }));
+    // The backend compares against the exact strings 'approved'/'rejected'
+    // (backend/backend/graph/nodes/finalize.py) — translate at the wire boundary.
+    const wireDecision = decision === 'approve' ? 'approved' : 'rejected';
+    socketRef.current?.send(JSON.stringify({ type: 'approval', decision: wireDecision }));
   };
 
   return { sendChat, sendApproval };
