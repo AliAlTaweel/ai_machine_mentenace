@@ -52,6 +52,42 @@ function initialNodeStatus(): Record<NodeName, NodeState> {
   };
 }
 
+/**
+ * Maps a backend node's `node_update` payload to the assistant-facing chat text.
+ * Field names are those emitted by backend/backend/graph/nodes/*.py.
+ * Returns null for nodes that should not produce an assistant message.
+ */
+function assistantContentFor(node: NodeName, data: Record<string, unknown>): string | null {
+  if (node === 'extract') {
+    if (data.needs_clarification === true && typeof data.clarification_message === 'string') {
+      return data.clarification_message;
+    }
+    return null;
+  }
+
+  if (node === 'rag_lookup') {
+    const diagnosis = typeof data.diagnosis === 'string' ? data.diagnosis : null;
+    if (data.no_procedure_found === true) return diagnosis;
+    if (diagnosis === null) return null;
+    const steps = Array.isArray(data.repair_steps)
+      ? (data.repair_steps as unknown[]).filter((s): s is string => typeof s === 'string')
+      : [];
+    if (steps.length === 0) return diagnosis;
+    return `${diagnosis}\n\nRepair steps:\n${steps.map((step) => `- ${step}`).join('\n')}`;
+  }
+
+  if (node === 'finalize') {
+    const id = data.work_order_id;
+    const status = data.work_order_status;
+    if (typeof id !== 'string' || typeof status !== 'string') return null;
+    return `Work order ${id} — status: ${status}.`;
+  }
+
+  // inventory_check / hitl_gate are represented by the tool-call log and the
+  // approval card respectively — no extra assistant message.
+  return null;
+}
+
 export interface SessionState {
   messages: ChatMessage[];
   nodeStatus: Record<NodeName, NodeState>;
@@ -64,6 +100,7 @@ export interface SessionState {
   setLlmBackend: (backend: 'local' | 'cloud') => void;
   setConnectionStatus: (status: ConnectionStatus) => void;
   addUserMessage: (content: string) => void;
+  addSystemMessage: (content: string) => void;
   handleServerEvent: (event: ServerEvent) => void;
   setApprovalDecision: (decision: 'approve' | 'reject') => void;
 }
@@ -91,20 +128,38 @@ export const useSessionStore = create<SessionState>((set) => ({
     }));
   },
 
+  addSystemMessage: (content) => {
+    set((state) => ({
+      messages: [...state.messages, { id: newId(), kind: 'system', content }],
+    }));
+  },
+
   handleServerEvent: (event) => {
     if (event.type === 'node_update') {
       const node = event.node as NodeName;
       if (!NODE_ORDER.includes(node)) return;
 
+      const assistantContent = assistantContentFor(node, event.data);
+      // The backend's graph routes straight to END after `extract` asks for
+      // clarification or `rag_lookup` finds no procedure (see build.py's
+      // route_after_extract / route_after_rag_lookup), so no later node runs.
+      const isTerminal =
+        (node === 'extract' && event.data.needs_clarification === true) ||
+        (node === 'rag_lookup' && event.data.no_procedure_found === true);
+
       set((state) => {
         const fromIndex = state.activeNode ? NODE_ORDER.indexOf(state.activeNode) : 0;
         const toIndex = NODE_ORDER.indexOf(node);
+        // Ignore out-of-order/duplicate updates for a node behind the active one.
+        if (toIndex < fromIndex) return state;
+
         const nodeStatus = { ...state.nodeStatus };
         for (let i = fromIndex; i <= toIndex; i += 1) {
           nodeStatus[NODE_ORDER[i]] = 'done';
         }
         const nextIndex = toIndex + 1;
-        const nextNode = nextIndex < NODE_ORDER.length ? NODE_ORDER[nextIndex] : null;
+        const nextNode =
+          !isTerminal && nextIndex < NODE_ORDER.length ? NODE_ORDER[nextIndex] : null;
         if (nextNode) nodeStatus[nextNode] = 'active';
 
         const inventoryStatus = event.data.inventory_status;
@@ -119,7 +174,15 @@ export const useSessionStore = create<SessionState>((set) => ({
               ]
             : state.toolCallLog;
 
-        return { nodeStatus, activeNode: nextNode, toolCallLog };
+        const messages =
+          assistantContent === null
+            ? state.messages
+            : [
+                ...state.messages,
+                { id: newId(), kind: 'assistant' as const, content: assistantContent },
+              ];
+
+        return { nodeStatus, activeNode: nextNode, toolCallLog, messages };
       });
       return;
     }
@@ -139,6 +202,7 @@ export const useSessionStore = create<SessionState>((set) => ({
       nodeStatus: state.activeNode
         ? { ...state.nodeStatus, [state.activeNode]: 'error' }
         : state.nodeStatus,
+      pendingApproval: null,
     }));
   },
 
