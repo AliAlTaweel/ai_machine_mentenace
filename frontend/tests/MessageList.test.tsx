@@ -16,12 +16,39 @@ describe('MessageList', () => {
       },
     ];
 
-    render(<MessageList messages={messages} onDecide={onDecide} />);
+    render(<MessageList messages={messages} onDecide={onDecide} disabled={false} />);
 
-    expect(screen.getByTestId('message-user')).toHaveTextContent('bearing is grinding');
+    expect(screen.getByText('bearing is grinding')).toBeInTheDocument();
     expect(screen.getByText('Parts order needs approval')).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('button', { name: 'Reject' }));
     expect(onDecide).toHaveBeenCalledWith('reject');
+  });
+
+  it('gives each message a unique testid so duplicate kinds stay addressable', () => {
+    const messages: ChatMessage[] = [
+      { id: '1', kind: 'user', content: 'first' },
+      { id: '2', kind: 'user', content: 'second' },
+    ];
+
+    render(<MessageList messages={messages} onDecide={vi.fn()} disabled={false} />);
+
+    expect(screen.getByTestId('message-1')).toHaveTextContent('first');
+    expect(screen.getByTestId('message-2')).toHaveTextContent('second');
+  });
+
+  it('disables approval buttons when disabled is passed even with no decision', () => {
+    const messages: ChatMessage[] = [
+      {
+        id: '1',
+        kind: 'approval',
+        approval: { required_parts: [], inventory_status: [] },
+      },
+    ];
+
+    render(<MessageList messages={messages} onDecide={vi.fn()} disabled />);
+
+    expect(screen.getByRole('button', { name: 'Approve' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Reject' })).toBeDisabled();
   });
 });

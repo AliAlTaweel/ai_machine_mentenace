@@ -11,7 +11,7 @@ const payload = {
 describe('ApprovalCard', () => {
   it('renders inventory status and calls onDecide on Approve', async () => {
     const onDecide = vi.fn();
-    render(<ApprovalCard payload={payload} onDecide={onDecide} />);
+    render(<ApprovalCard payload={payload} onDecide={onDecide} disabled={false} />);
 
     expect(screen.getByText(/BEARING-X4: low_stock/)).toBeInTheDocument();
 
@@ -20,7 +20,14 @@ describe('ApprovalCard', () => {
   });
 
   it('disables both buttons once a decision has been made', () => {
-    render(<ApprovalCard payload={payload} decision="approve" onDecide={vi.fn()} />);
+    render(<ApprovalCard payload={payload} decision="approve" onDecide={vi.fn()} disabled={false} />);
+
+    expect(screen.getByRole('button', { name: 'Approve' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Reject' })).toBeDisabled();
+  });
+
+  it('disables both buttons when disabled is set even with no decision made', () => {
+    render(<ApprovalCard payload={payload} onDecide={vi.fn()} disabled />);
 
     expect(screen.getByRole('button', { name: 'Approve' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Reject' })).toBeDisabled();

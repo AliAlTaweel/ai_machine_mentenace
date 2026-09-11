@@ -4,10 +4,12 @@ export interface ApprovalCardProps {
   payload: ApprovalRequestPayload;
   decision?: 'approve' | 'reject';
   onDecide: (decision: 'approve' | 'reject') => void;
+  disabled: boolean;
 }
 
-export function ApprovalCard({ payload, decision, onDecide }: ApprovalCardProps) {
+export function ApprovalCard({ payload, decision, onDecide, disabled }: ApprovalCardProps) {
   const resolved = decision !== undefined;
+  const buttonsDisabled = resolved || disabled;
 
   return (
     <div className="rounded border border-amber-400 bg-amber-50 p-3 text-sm">
@@ -22,7 +24,7 @@ export function ApprovalCard({ payload, decision, onDecide }: ApprovalCardProps)
       <div className="mt-3 flex gap-2">
         <button
           type="button"
-          disabled={resolved}
+          disabled={buttonsDisabled}
           onClick={() => onDecide('approve')}
           className="rounded bg-green-600 px-3 py-1 text-white disabled:opacity-50"
         >
@@ -30,7 +32,7 @@ export function ApprovalCard({ payload, decision, onDecide }: ApprovalCardProps)
         </button>
         <button
           type="button"
-          disabled={resolved}
+          disabled={buttonsDisabled}
           onClick={() => onDecide('reject')}
           className="rounded bg-red-600 px-3 py-1 text-white disabled:opacity-50"
         >

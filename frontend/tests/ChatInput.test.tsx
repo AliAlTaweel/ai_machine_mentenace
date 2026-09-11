@@ -23,6 +23,32 @@ describe('ChatInput', () => {
     expect(onClearPdfText).toHaveBeenCalled();
   });
 
+  it('submits on Enter', async () => {
+    const onSend = vi.fn();
+    render(
+      <ChatInput disabled={false} pendingPdfText={null} onSend={onSend} onClearPdfText={vi.fn()} />
+    );
+
+    await userEvent.type(
+      screen.getByPlaceholderText('Describe the error...'),
+      'bearing is grinding{Enter}'
+    );
+
+    expect(onSend).toHaveBeenCalledWith('bearing is grinding', undefined);
+  });
+
+  it('does not send whitespace-only input', async () => {
+    const onSend = vi.fn();
+    render(
+      <ChatInput disabled={false} pendingPdfText={null} onSend={onSend} onClearPdfText={vi.fn()} />
+    );
+
+    await userEvent.type(screen.getByPlaceholderText('Describe the error...'), '   ');
+    await userEvent.click(screen.getByRole('button', { name: 'Send' }));
+
+    expect(onSend).not.toHaveBeenCalled();
+  });
+
   it('does not send when disabled', async () => {
     const onSend = vi.fn();
     render(<ChatInput disabled pendingPdfText={null} onSend={onSend} onClearPdfText={vi.fn()} />);

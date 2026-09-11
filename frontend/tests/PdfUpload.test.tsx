@@ -42,6 +42,21 @@ describe('PdfUpload', () => {
     expect(onError).toHaveBeenCalledWith('This PDF has no extractable text');
   });
 
+  it('reports a PDF-processing error (not a network error) when the body is not JSON', async () => {
+    (fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: false,
+      json: async () => {
+        throw new SyntaxError('Unexpected token < in JSON');
+      },
+    });
+    const onError = vi.fn();
+    render(<PdfUpload disabled={false} onExtracted={vi.fn()} onError={onError} />);
+
+    await userEvent.upload(screen.getByLabelText('Attach PDF'), makePdfFile());
+
+    expect(onError).toHaveBeenCalledWith('Could not process this PDF.');
+  });
+
   it('calls onError when the request itself fails', async () => {
     (fetch as unknown as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('network down'));
     const onError = vi.fn();

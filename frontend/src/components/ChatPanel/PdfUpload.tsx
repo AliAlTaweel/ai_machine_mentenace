@@ -19,7 +19,13 @@ export function PdfUpload({ disabled, onExtracted, onError }: PdfUploadProps) {
       const formData = new FormData();
       formData.append('file', file);
       const response = await fetch('/upload', { method: 'POST', body: formData });
-      const body = await response.json();
+      let body: { detail?: string; extracted_text?: string };
+      try {
+        body = await response.json();
+      } catch {
+        onError('Could not process this PDF.');
+        return;
+      }
       if (!response.ok) {
         onError(body.detail ?? 'Could not process this PDF.');
       } else {
