@@ -14,23 +14,68 @@ Full design spec: [`docs/superpowers/specs/2026-09-10-industrial-maintenance-age
 
 ## Architecture
 
+```mermaid
+flowchart TB
+    FE["React frontend<br/>chat + live execution-graph viz"]
+
+    subgraph BE["FastAPI backend"]
+        LLM["LLM interface<br/>Ollama/Gemma (default) or Claude API"]
+        EVT["Event emitter<br/>→ WebSocket graph events"]
+
+        subgraph LG["LangGraph state machine<br/>(checkpointed to MongoDB)"]
+            direction LR
+            EX["Extract"] --> RAG["RAG lookup"]
+            RAG --> INV["Inventory check<br/>(MCP client)"]
+            INV --> HITL["HITL gate"]
+            HITL --> FIN["Finalize"]
+        end
+
+        LG -. uses .-> LLM
+        LG -. emits .-> EVT
+    end
+
+    MCP["MCP inventory server<br/>tools: check_stock, reserve_parts"]
+
+    subgraph DB["MongoDB Atlas"]
+        direction LR
+        M[("manuals")]
+        I[("inventory")]
+        WO[("work_orders")]
+        CP[("checkpoints")]
+    end
+
+    FE <-->|"WebSocket: chat + graph events + approve/reject<br/>REST: session, PDF upload"| BE
+    INV <-->|"MCP protocol (stdio)"| MCP
+
+    RAG -.-> M
+    MCP -.-> I
+    FIN -.-> WO
+    LG -.-> CP
 ```
-React frontend (chat + live execution graph)
-        │  WebSocket (chat + graph events + approve/reject) + REST (session, PDF upload)
-        ▼
-FastAPI backend
-   ├─ LangGraph state machine, checkpointed to MongoDB (langgraph-checkpoint-mongodb)
-   │     Extract → RAG lookup → Inventory check (MCP client) → HITL gate → Finalize
-   ├─ LLM interface: Ollama/Gemma (default) or Claude API, selected per session
-   └─ Event emitter → WebSocket → frontend graph viz
-        │
-        ▼ MCP protocol (stdio transport)
-MCP inventory server (Python, official MCP SDK)
-   └─ tools: check_stock(part_id), reserve_parts(part_id, quantity)
-        │
-        ▼
-MongoDB Atlas
-   - manuals, inventory, work_orders, checkpoints (LangGraph)
+
+## User Journey
+
+```mermaid
+flowchart TD
+    A["Technician opens app,<br/>clicks Start Session"] --> B["Describes the fault:<br/>text message or PDF incident report"]
+    B --> C["Extract node:<br/>pull machine ID + error code"]
+    C -->|"missing machine ID / error code"| D["Agent asks a clarifying question<br/>e.g. 'I need the machine ID and error code'"]
+    D --> B
+    C -->|"machine ID + error code found"| E["RAG lookup:<br/>search manuals for matching procedure"]
+    E -->|"no manual matches this error code"| F["Agent reports:<br/>no relevant procedure found<br/>(no fabricated diagnosis)"]
+    E -->|"procedure found"| G["Diagnosis + repair steps shown in chat"]
+    G --> H["Inventory check:<br/>MCP check_stock for required part(s)"]
+    H -->|"in stock, above threshold"| I["Finalize:<br/>reserve parts, create work order"]
+    H -->|"low stock or out of stock"| J["HITL approval card:<br/>approve/reject ordering more parts"]
+    J -->|"approve"| I
+    J -->|"reject"| K["Work order not finalized"]
+    I --> L["Work order status: completed<br/>shown in chat"]
+
+    style D fill:#fff3cd,stroke:#b08800
+    style F fill:#f8d7da,stroke:#a94442
+    style J fill:#fff3cd,stroke:#b08800
+    style L fill:#d4edda,stroke:#2e7d32
+    style K fill:#f8d7da,stroke:#a94442
 ```
 
 Built in three phases, each a standalone package:

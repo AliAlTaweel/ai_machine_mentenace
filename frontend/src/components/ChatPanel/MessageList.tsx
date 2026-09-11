@@ -26,7 +26,11 @@ export function MessageList({ messages, onDecide, disabled }: MessageListProps) 
           <div
             key={message.id}
             data-testid={`message-${message.id}`}
-            className={message.kind === 'user' ? 'text-right' : 'text-left text-gray-700'}
+            className={
+              message.kind === 'user'
+                ? 'text-right whitespace-pre-line'
+                : 'text-left whitespace-pre-line text-gray-700'
+            }
           >
             {message.content}
           </div>
