@@ -1,4 +1,5 @@
 from backend.rag.embeddings import embed_text
+from backend.rag.vector_search import ensure_vector_index
 
 SAMPLE_MANUALS = [
     {
@@ -87,4 +88,5 @@ def seed_manuals(collection, embed_fn=embed_text, manuals: list[dict] = SAMPLE_M
             upsert=True,
         )
         count += 1
+    ensure_vector_index(collection)
     return count

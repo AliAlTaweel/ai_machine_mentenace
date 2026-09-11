@@ -49,8 +49,9 @@ Design/implementation history for each phase lives under
 
 - Python 3.11+ (3.12 recommended)
 - Node.js 18+
-- MongoDB Atlas cluster (with a Vector Search index on the `manuals`
-  collection — see the design spec's Data Model section)
+- MongoDB Atlas cluster (Atlas Vector Search must be available on the
+  cluster tier — the `manuals` collection's search index itself is created
+  automatically the first time you seed manuals, see below)
 - One of:
   - [Ollama](https://ollama.com) running locally (default LLM backend), or
   - an Anthropic API key (for the "Claude API" backend toggle)
@@ -89,6 +90,18 @@ or testing.
 cd backend
 python3 -m venv .venv && .venv/bin/pip install -e ".[dev]"
 .venv/bin/pytest                       # run tests
+
+# Seed synthetic manuals (once) — this also creates the Atlas Vector
+# Search index on first run if it doesn't already exist. The index takes
+# a few seconds to become queryable after creation (Atlas builds it
+# asynchronously); RAG lookups will return "no relevant procedure found"
+# for everything until it's ready.
+.venv/bin/python3 -c "
+from backend.db import get_manuals_collection
+from backend.rag.manuals_seed import seed_manuals
+seed_manuals(get_manuals_collection())
+"
+
 .venv/bin/uvicorn backend.api.app:app --reload
 ```
 
@@ -113,10 +126,16 @@ Session**, and chat.
 
 ```bash
 # Terminal 1
-cd mcp_server && .venv/bin/mcp-inventory-server seed   # once, to seed data
+cd mcp_server && .venv/bin/mcp-inventory-server seed   # once, to seed inventory
 
 # Terminal 2
-cd backend && .venv/bin/uvicorn backend.api.app:app --reload
+cd backend
+.venv/bin/python3 -c "
+from backend.db import get_manuals_collection
+from backend.rag.manuals_seed import seed_manuals
+seed_manuals(get_manuals_collection())
+"   # once, to seed manuals + create the vector search index
+.venv/bin/uvicorn backend.api.app:app --reload
 
 # Terminal 3
 cd frontend && npm run dev
