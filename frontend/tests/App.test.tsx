@@ -75,4 +75,17 @@ describe('App', () => {
     const sentFrame = JSON.parse(FakeWebSocket.instances[0].sent[0]);
     expect(sentFrame).toMatchObject({ type: 'chat', content: 'bearing is grinding' });
   });
+
+  it('opens the manuals panel from Settings and closes it', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => [] }));
+    render(<App />);
+
+    expect(screen.queryByTestId('manuals-list')).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Manage Manuals' }));
+    expect(await screen.findByTestId('manuals-list')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByLabelText('Close'));
+    expect(screen.queryByTestId('manuals-list')).not.toBeInTheDocument();
+  });
 });
