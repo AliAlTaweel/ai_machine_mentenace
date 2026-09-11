@@ -1,6 +1,10 @@
 import { useSessionStore } from '../store/sessionStore';
 
-export function SettingsBar() {
+export interface SettingsBarProps {
+  onManageManuals: () => void;
+}
+
+export function SettingsBar({ onManageManuals }: SettingsBarProps) {
   const llmBackend = useSessionStore((s) => s.llmBackend);
   const setLlmBackend = useSessionStore((s) => s.setLlmBackend);
   const connectionStatus = useSessionStore((s) => s.connectionStatus);
@@ -29,6 +33,13 @@ export function SettingsBar() {
         />
         Claude API
       </label>
+      <button
+        type="button"
+        onClick={onManageManuals}
+        className="ml-auto rounded border px-3 py-1 text-xs"
+      >
+        Manage Manuals
+      </button>
     </div>
   );
 }
