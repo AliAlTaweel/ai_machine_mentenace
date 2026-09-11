@@ -86,26 +86,13 @@ def create_app(
     ):
         contents = await file.read()
         parsed_error_codes = [code.strip() for code in error_codes.split(",") if code.strip()]
-        try:
-            result = ingest_manual_pdf(
-                manuals_collection_factory(),
-                filename=file.filename,
-                pdf_bytes=contents,
-                machine_type=machine_type,
-                error_codes=parsed_error_codes,
-            )
-        except Exception as exc:
-            # Malformed/unreadable PDF bytes raise inside PdfReader itself
-            # (e.g. PdfStreamError) rather than returning an error result;
-            # handle that here the same way the /upload route does.
-            logger.warning("Manual upload rejected: unreadable file (%s)", exc)
-            raise HTTPException(
-                status_code=400,
-                detail=(
-                    "Could not read this PDF — please paste the error description "
-                    f"as text instead. ({exc})"
-                ),
-            )
+        result = ingest_manual_pdf(
+            manuals_collection_factory(),
+            filename=file.filename,
+            pdf_bytes=contents,
+            machine_type=machine_type,
+            error_codes=parsed_error_codes,
+        )
         if result["status"] == "error":
             logger.warning("Manual upload rejected: %s", result["message"])
             raise HTTPException(status_code=400, detail=result["message"])

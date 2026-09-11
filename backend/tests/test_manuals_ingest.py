@@ -165,3 +165,65 @@ def test_list_uploaded_manuals_excludes_seeded_manuals_without_content_hash():
     )
 
     assert list_uploaded_manuals(collection) == []
+
+
+class RaisingReader:
+    def __init__(self, _stream):
+        raise ValueError("not a valid PDF")
+
+
+def test_ingest_manual_pdf_returns_error_status_when_reader_raises():
+    collection = make_collection()
+
+    result = ingest_manual_pdf(
+        collection,
+        filename="corrupt.pdf",
+        pdf_bytes=b"garbage bytes",
+        machine_type="CNC-Mill-200",
+        error_codes=["E101"],
+        embed_fn=fake_embed,
+        reader_fn=RaisingReader,
+    )
+
+    assert result["status"] == "error"
+    assert collection.count_documents({}) == 0
+
+
+def test_ingest_manual_pdf_cleans_up_partial_chunks_on_write_failure():
+    collection = make_collection()
+    call_count = 0
+
+    def failing_embed(text: str) -> list[float]:
+        nonlocal call_count
+        call_count += 1
+        if call_count == 2:
+            raise RuntimeError("embedding service unavailable")
+        return fake_embed(text)
+
+    try:
+        ingest_manual_pdf(
+            collection,
+            filename="flaky.pdf",
+            pdf_bytes=b"flaky bytes",
+            machine_type="CNC-Mill-200",
+            error_codes=["E101"],
+            embed_fn=failing_embed,
+            reader_fn=lambda _: FakeReader(["page one", "page two"]),
+        )
+    except RuntimeError:
+        pass
+
+    # No orphaned chunk from page one should remain, and a retry with a
+    # working embed_fn must succeed rather than hitting "duplicate".
+    assert collection.count_documents({}) == 0
+
+    retry_result = ingest_manual_pdf(
+        collection,
+        filename="flaky.pdf",
+        pdf_bytes=b"flaky bytes",
+        machine_type="CNC-Mill-200",
+        error_codes=["E101"],
+        embed_fn=fake_embed,
+        reader_fn=lambda _: FakeReader(["page one", "page two"]),
+    )
+    assert retry_result == {"status": "ingested", "chunks": 2}

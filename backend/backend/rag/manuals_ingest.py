@@ -27,12 +27,21 @@ def ingest_manual_pdf(
     if existing is not None:
         return {"status": "duplicate", "filename": existing["source_filename"]}
 
-    reader = reader_fn(io.BytesIO(pdf_bytes))
-    pages_with_text = []
-    for index, page in enumerate(reader.pages):
-        text = (page.extract_text() or "").strip()
-        if text:
-            pages_with_text.append((index, text))
+    try:
+        reader = reader_fn(io.BytesIO(pdf_bytes))
+        pages_with_text = []
+        for index, page in enumerate(reader.pages):
+            text = (page.extract_text() or "").strip()
+            if text:
+                pages_with_text.append((index, text))
+    except Exception as exc:
+        return {
+            "status": "error",
+            "message": (
+                "Could not read this PDF — please upload a text-extractable "
+                f"manual instead. ({exc})"
+            ),
+        }
 
     if not pages_with_text:
         return {
@@ -44,25 +53,33 @@ def ingest_manual_pdf(
         }
 
     uploaded_at = datetime.now(timezone.utc)
-    for index, text in pages_with_text:
-        manual_id = f"{content_hash[:12]}-p{index}"
-        collection.update_one(
-            {"manual_id": manual_id},
-            {
-                "$set": {
-                    "manual_id": manual_id,
-                    "chunk_text": text,
-                    "embedding": embed_fn(text),
-                    "machine_type": machine_type,
-                    "error_codes": error_codes,
-                    "content_hash": content_hash,
-                    "source_filename": filename,
-                    "chunk_index": index,
-                    "uploaded_at": uploaded_at,
-                }
-            },
-            upsert=True,
-        )
+    try:
+        for index, text in pages_with_text:
+            manual_id = f"{content_hash[:12]}-p{index}"
+            collection.update_one(
+                {"manual_id": manual_id},
+                {
+                    "$set": {
+                        "manual_id": manual_id,
+                        "chunk_text": text,
+                        "embedding": embed_fn(text),
+                        "machine_type": machine_type,
+                        "error_codes": error_codes,
+                        "content_hash": content_hash,
+                        "source_filename": filename,
+                        "chunk_index": index,
+                        "uploaded_at": uploaded_at,
+                    }
+                },
+                upsert=True,
+            )
+    except Exception:
+        # Don't leave a partial set of chunks tagged with this content_hash —
+        # that would make every future upload of this exact file return
+        # "duplicate" against incomplete/corrupt data, forever. Clean up and
+        # let the caller retry from a clean slate.
+        collection.delete_many({"content_hash": content_hash})
+        raise
 
     ensure_vector_index(collection)
 

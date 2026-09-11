@@ -1,3 +1,4 @@
+import hashlib
 import io
 
 import mongomock
@@ -90,3 +91,33 @@ def test_get_manuals_returns_empty_list_when_nothing_uploaded():
 
     assert response.status_code == 200
     assert response.json() == []
+
+
+def test_manuals_upload_returns_duplicate_status_for_already_ingested_content():
+    collection = make_manuals_collection()
+    pdf_bytes = b"same exact bytes uploaded twice"
+    content_hash = hashlib.sha256(pdf_bytes).hexdigest()
+    collection.insert_one(
+        {
+            "manual_id": f"{content_hash[:12]}-p0",
+            "chunk_text": "existing chunk",
+            "embedding": [0.1],
+            "machine_type": "CNC-Mill-200",
+            "error_codes": ["E101"],
+            "content_hash": content_hash,
+            "source_filename": "already-uploaded.pdf",
+            "chunk_index": 0,
+            "uploaded_at": "2026-09-11T00:00:00+00:00",
+        }
+    )
+    client = TestClient(make_app(collection))
+
+    response = client.post(
+        "/manuals/upload",
+        data={"machine_type": "CNC-Mill-200", "error_codes": "E101"},
+        files={"file": ("re-upload.pdf", pdf_bytes, "application/pdf")},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body == {"status": "duplicate", "filename": "already-uploaded.pdf"}
