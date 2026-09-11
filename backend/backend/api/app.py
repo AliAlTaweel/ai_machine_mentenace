@@ -2,7 +2,7 @@ import io
 import json
 import os
 
-from fastapi import FastAPI, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Form, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.checkpoint.mongodb import MongoDBSaver
 from langgraph.types import Command
@@ -17,6 +17,7 @@ from backend.graph.build import build_graph as default_build_graph
 from backend.llm.claude_client import ClaudeClient
 from backend.llm.ollama_client import OllamaClient
 from backend.logging_config import logger
+from backend.rag.manuals_ingest import ingest_manual_pdf, list_uploaded_manuals
 
 
 def default_llm_factory(backend_choice: str):
@@ -76,6 +77,47 @@ def create_app(
             )
         logger.info("PDF upload succeeded: extracted %d chars", len(text))
         return {"extracted_text": text}
+
+    @app.post("/manuals/upload")
+    async def upload_manual(
+        file: UploadFile,
+        machine_type: str = Form(...),
+        error_codes: str = Form(...),
+    ):
+        contents = await file.read()
+        parsed_error_codes = [code.strip() for code in error_codes.split(",") if code.strip()]
+        try:
+            result = ingest_manual_pdf(
+                manuals_collection_factory(),
+                filename=file.filename,
+                pdf_bytes=contents,
+                machine_type=machine_type,
+                error_codes=parsed_error_codes,
+            )
+        except Exception as exc:
+            # Malformed/unreadable PDF bytes raise inside PdfReader itself
+            # (e.g. PdfStreamError) rather than returning an error result;
+            # handle that here the same way the /upload route does.
+            logger.warning("Manual upload rejected: unreadable file (%s)", exc)
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "Could not read this PDF — please paste the error description "
+                    f"as text instead. ({exc})"
+                ),
+            )
+        if result["status"] == "error":
+            logger.warning("Manual upload rejected: %s", result["message"])
+            raise HTTPException(status_code=400, detail=result["message"])
+        if result["status"] == "duplicate":
+            logger.info("Manual upload duplicate: filename=%s", result["filename"])
+        else:
+            logger.info("Manual upload ingested: chunks=%d", result["chunks"])
+        return result
+
+    @app.get("/manuals")
+    async def get_manuals():
+        return list_uploaded_manuals(manuals_collection_factory())
 
     @app.websocket("/ws/{thread_id}")
     async def websocket_chat(websocket: WebSocket, thread_id: str, backend: str = "local"):
