@@ -51,34 +51,34 @@ app (`backend.api.app:app`) with:
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│ App (React + Vite + TypeScript)                          │
-│                                                            │
-│  ┌───────────────────┐   ┌───────────────────────────┐   │
-│  │ ChatPanel          │   │ GraphPanel                 │   │
-│  │  - MessageList      │   │  - 5 NodeBox components     │   │
-│  │  - ApprovalCard      │   │    (idle/active/done/error) │   │
-│  │    (inline in list)  │   │  - ToolCallLog (scrolling)   │   │
-│  │  - ChatInput          │   │                               │   │
-│  │  - PdfUpload           │   │                               │   │
-│  └──────────┬─────────┘   └──────────────┬────────────┘   │
-│             │  dispatch actions            │  read state      │
-│             ▼                              ▼                  │
-│  ┌─────────────────────────────────────────────────────┐  │
-│  │ Zustand store (sessionStore)                          │  │
-│  │  - messages: ChatMessage[]                             │  │
-│  │  - pendingApproval: ApprovalRequest | null              │  │
-│  │  - nodeStatus: Record<NodeName, NodeState>                │  │
-│  │  - toolCallLog: ToolCallEntry[]                           │  │
+┌───────────────────────────────────────────────------────---──────┐
+│ App (React + Vite + TypeScript)                                  │
+│                                                                  │
+│  ┌─────────────────---──┐   ┌─────────────────────────----──┐    │
+│  │ ChatPanel            │   │ GraphPanel                    │    │
+│  │  - MessageList       │   │  - 5 NodeBox components       │    │
+│  │  - ApprovalCard      │   │    (idle/active/done/error)   │    │
+│  │    (inline in list)  │   │  - ToolCallLog (scrolling)    │    │
+│  │  - ChatInput         │   │                               │    │
+│  │  - PdfUpload         │   │                               │    │
+│  └──────────┬───────────┘   └──────────────┬───────────----─┘    │
+│             │  dispatch actions            │  read state         │
+│             ▼                              ▼                     │
+│  ┌────────────────────────────────────────────────────-------─┐  │
+│  │ Zustand store (sessionStore)                               │  │
+│  │  - messages: ChatMessage[]                                 │  │
+│  │  - pendingApproval: ApprovalRequest | null                 │  │
+│  │  - nodeStatus: Record<NodeName, NodeState>                 │  │
+│  │  - toolCallLog: ToolCallEntry[]                            │  │
 │  │  - connectionStatus: 'connecting'|'open'|'closed'|'error'  │  │
-│  │  - llmBackend: 'local' | 'cloud'                            │  │
-│  └─────────────────────────────────────────────────────┘  │
-│             ▲                              │                  │
-│             │  events                       │  ws.send(json)   │
-│  ┌──────────┴─────────────────────────────────────────┐   │
-│  │ useSessionSocket (WebSocket hook)                    │   │
-│  │  connects to /ws/{thread_id}?backend=...              │   │
-│  └─────────────────────────────────────────────────────┘   │
+│  │  - llmBackend: 'local' | 'cloud'                           │  │
+│  └─────────────────────────────────────────────────────-------┘  │
+│             ▲                              │                    │
+│             │  events                       │  ws.send(json)     │
+│  ┌──────────┴──────────────────────────────────────────┐       │
+│  │ useSessionSocket (WebSocket hook)                     │       │
+│  │  connects to /ws/{thread_id}?backend=...              │       │
+│  └─────────────────────────────────────────────────────┘       │
 └─────────────────────────────────────────────────────────┘
         │ WebSocket (chat/approval in, node_update/                │ REST
         │ approval_request/error out)                                │ POST /upload
