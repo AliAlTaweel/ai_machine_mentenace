@@ -1,5 +1,22 @@
 import { useEffect, useState, type FormEvent } from 'react';
 
+interface FastApiValidationError {
+  type: string;
+  loc: (string | number)[];
+  msg: string;
+  input: unknown;
+}
+
+function describeError(detail: unknown, fallback: string): string {
+  if (typeof detail === 'string') return detail;
+  if (Array.isArray(detail)) {
+    return (detail as FastApiValidationError[])
+      .map((err) => err.msg ?? String(err))
+      .join('; ') || fallback;
+  }
+  return fallback;
+}
+
 interface ManualEntry {
   filename: string;
   machine_type: string;
@@ -43,6 +60,10 @@ export function ManualsPanel({ onClose }: ManualsPanelProps) {
     const fileInput = form.elements.namedItem('file') as HTMLInputElement;
     const file = fileInput.files?.[0];
     if (!file) return;
+    if (!machineType.trim()) {
+      setStatus('Machine type is required.');
+      return;
+    }
 
     setUploading(true);
     setStatus(null);
@@ -54,7 +75,7 @@ export function ManualsPanel({ onClose }: ManualsPanelProps) {
       const response = await fetch('/manuals/upload', { method: 'POST', body: formData });
       const body = await response.json();
       if (!response.ok) {
-        setStatus(body.detail ?? 'Could not process this manual.');
+        setStatus(describeError(body.detail, 'Could not process this manual.'));
       } else if (body.status === 'duplicate') {
         setStatus(`Already in the knowledge base as ${body.filename}`);
       } else {
