@@ -12,6 +12,7 @@ dependencies = [
     # against the new API.
     "mcp>=1.2.0,<2.0",
     "pymongo>=4.9",
+    "python-dotenv>=1.0",
 ]
 
 [project.optional-dependencies]

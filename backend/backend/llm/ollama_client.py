@@ -7,7 +7,7 @@ from backend.llm.base import LLMClient, T
 
 
 class OllamaClient(LLMClient):
-    def __init__(self, model: str = "gemma3:4b", host: str | None = None):
+    def __init__(self, model: str = "gemma4:e4b", host: str | None = None):
         self._model = model
         self._client = ollama.Client(host=host) if host else ollama.Client()
 
