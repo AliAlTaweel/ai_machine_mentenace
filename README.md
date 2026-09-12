@@ -97,7 +97,10 @@ Design/implementation history for each phase lives under
 - Node.js 18+
 - MongoDB Atlas cluster (Atlas Vector Search must be available on the
   cluster tier — the `manuals` collection's search index itself is created
-  automatically the first time you seed manuals, see below)
+  automatically the first time you seed manuals, see below). If you seeded
+  manuals before the `machine_type` filter field was added to the index
+  definition, drop the existing `manuals_vector_index` in Atlas so it gets
+  recreated with the filter field on next seed/startup.
 - One of:
   - [Ollama](https://ollama.com) running locally (default LLM backend), or
   - an Anthropic API key (for the "Claude API" backend toggle)
@@ -158,6 +161,11 @@ Runs at `http://localhost:8000`. Exposes:
   it into the searchable knowledge base
 - `GET /manuals` — list previously-uploaded manuals
 - `WS /ws/{thread_id}?backend=local|cloud` — chat session (`local` = Ollama, `cloud` = Claude)
+
+RAG lookups narrow the vector search to the machine's `machine_type` when
+possible, falling back to an unfiltered search if nothing matches — the
+chat-extracted `machine_id` and the upload-time `machine_type` are both free
+text with no shared vocabulary, so an exact match isn't guaranteed.
 
 ### 3. Frontend (Phase 3)
 
