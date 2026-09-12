@@ -24,6 +24,12 @@ def fake_embed(text: str) -> list[float]:
     return [float(len(text))]
 
 
+def fake_chunk_per_paragraph(text: str) -> list[str]:
+    """Splits on the "\n\n" page-join separator so tests get one chunk per
+    input page, independent of the real word-count-based chunk_text."""
+    return [p for p in text.split("\n\n") if p]
+
+
 def make_collection():
     return mongomock.MongoClient()["machine_repair"]["manuals"]
 
@@ -44,6 +50,7 @@ def test_ingest_manual_pdf_creates_one_chunk_per_page():
         error_codes=["H33"],
         embed_fn=fake_embed,
         reader_fn=lambda _: FakeReader(["page one text", "page two text"]),
+        chunk_fn=fake_chunk_per_paragraph,
     )
 
     assert result == {"status": "ingested", "chunks": 2}
@@ -54,7 +61,7 @@ def test_ingest_manual_pdf_creates_one_chunk_per_page():
     assert all(doc["source_filename"] == "press-manual.pdf" for doc in docs)
     assert all(doc["machine_type"] == "Hydraulic-Press-9" for doc in docs)
     assert all(doc["error_codes"] == ["H33"] for doc in docs)
-    assert all(doc["manual_id"] == f"{content_hash[:12]}-p{doc['chunk_index']}" for doc in docs)
+    assert all(doc["manual_id"] == f"{content_hash[:12]}-c{doc['chunk_index']}" for doc in docs)
 
 
 def test_ingest_manual_pdf_skips_pages_with_no_extractable_text():
@@ -68,6 +75,7 @@ def test_ingest_manual_pdf_skips_pages_with_no_extractable_text():
         error_codes=["E101"],
         embed_fn=fake_embed,
         reader_fn=lambda _: FakeReader(["real text", "", "   "]),
+        chunk_fn=fake_chunk_per_paragraph,
     )
 
     assert result == {"status": "ingested", "chunks": 1}
@@ -106,6 +114,7 @@ def test_ingest_manual_pdf_detects_duplicate_by_content_hash_without_reembedding
         error_codes=["E101"],
         embed_fn=counting_embed,
         reader_fn=lambda _: FakeReader(["page text"]),
+        chunk_fn=fake_chunk_per_paragraph,
     )
     calls_after_first_upload = len(embed_calls)
 
@@ -117,6 +126,7 @@ def test_ingest_manual_pdf_detects_duplicate_by_content_hash_without_reembedding
         error_codes=["E101"],
         embed_fn=counting_embed,
         reader_fn=lambda _: FakeReader(["page text"]),
+        chunk_fn=fake_chunk_per_paragraph,
     )
 
     assert result == {"status": "duplicate", "filename": "first-upload.pdf"}
@@ -134,6 +144,7 @@ def test_list_uploaded_manuals_returns_one_row_per_manual_newest_first():
         ["E101"],
         embed_fn=fake_embed,
         reader_fn=lambda _: FakeReader(["p1", "p2"]),
+        chunk_fn=fake_chunk_per_paragraph,
     )
     ingest_manual_pdf(
         collection,
@@ -143,6 +154,7 @@ def test_list_uploaded_manuals_returns_one_row_per_manual_newest_first():
         ["H33"],
         embed_fn=fake_embed,
         reader_fn=lambda _: FakeReader(["p1"]),
+        chunk_fn=fake_chunk_per_paragraph,
     )
 
     rows = list_uploaded_manuals(collection)
@@ -209,6 +221,7 @@ def test_ingest_manual_pdf_cleans_up_partial_chunks_on_write_failure():
             error_codes=["E101"],
             embed_fn=failing_embed,
             reader_fn=lambda _: FakeReader(["page one", "page two"]),
+            chunk_fn=fake_chunk_per_paragraph,
         )
     except RuntimeError:
         pass
@@ -225,5 +238,6 @@ def test_ingest_manual_pdf_cleans_up_partial_chunks_on_write_failure():
         error_codes=["E101"],
         embed_fn=fake_embed,
         reader_fn=lambda _: FakeReader(["page one", "page two"]),
+        chunk_fn=fake_chunk_per_paragraph,
     )
     assert retry_result == {"status": "ingested", "chunks": 2}

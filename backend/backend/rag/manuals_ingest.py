@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 
 from pypdf import PdfReader
 
+from backend.rag.chunking import chunk_text
 from backend.rag.embeddings import embed_text
 from backend.rag.vector_search import ensure_vector_index
 
@@ -20,6 +21,7 @@ def ingest_manual_pdf(
     error_codes: list[str],
     embed_fn=embed_text,
     reader_fn=PdfReader,
+    chunk_fn=chunk_text,
 ) -> dict:
     content_hash = compute_content_hash(pdf_bytes)
 
@@ -52,17 +54,22 @@ def ingest_manual_pdf(
             ),
         }
 
+    # Join pages with a paragraph break so chunking can span a page boundary
+    # instead of truncating a procedure that continues onto the next page.
+    full_text = "\n\n".join(text for _, text in pages_with_text)
+    chunks = chunk_fn(full_text)
+
     uploaded_at = datetime.now(timezone.utc)
     try:
-        for index, text in pages_with_text:
-            manual_id = f"{content_hash[:12]}-p{index}"
+        for index, chunk in enumerate(chunks):
+            manual_id = f"{content_hash[:12]}-c{index}"
             collection.update_one(
                 {"manual_id": manual_id},
                 {
                     "$set": {
                         "manual_id": manual_id,
-                        "chunk_text": text,
-                        "embedding": embed_fn(text),
+                        "chunk_text": chunk,
+                        "embedding": embed_fn(chunk),
                         "machine_type": machine_type,
                         "error_codes": error_codes,
                         "content_hash": content_hash,
@@ -83,7 +90,7 @@ def ingest_manual_pdf(
 
     ensure_vector_index(collection)
 
-    return {"status": "ingested", "chunks": len(pages_with_text)}
+    return {"status": "ingested", "chunks": len(chunks)}
 
 
 def list_uploaded_manuals(collection) -> list[dict]:

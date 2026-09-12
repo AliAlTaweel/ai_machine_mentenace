@@ -167,6 +167,28 @@ possible, falling back to an unfiltered search if nothing matches — the
 chat-extracted `machine_id` and the upload-time `machine_type` are both free
 text with no shared vocabulary, so an exact match isn't guaranteed.
 
+#### Retrieval quality
+
+Uploaded manuals are split with token-bounded, sentence-boundary-aware
+chunking (`backend/backend/rag/chunking.py`, ~300 tokens/chunk with ~40-token
+overlap) rather than one chunk per PDF page, so a procedure that spans a page
+break doesn't get truncated into two disconnected chunks.
+
+Retrieval quality is regression-tested against the seeded manuals in
+`backend/tests/test_retrieval_eval.py` — a small (query, expected manual)
+eval set scored on recall@3 (`backend/backend/rag/eval.py`), matching the
+`top_k=3` used in production. This catches a chunking or embedding-model
+change that quietly hurts retrieval, rather than relying on manual spot
+checks.
+
+**Known limitations, not implemented in this portfolio project:** exact-code
+matching (a filter on `error_codes` mirroring the `machine_type` filter
+above), hybrid lexical+vector search (Atlas `$search` + RRF/`$rankFusion`) for
+queries built around IDs/part numbers that dense embeddings handle poorly,
+and cross-encoder reranking of top candidates. The eval harness above is what
+would justify adding any of these — right now recall@3 on the seeded set is
+at baseline, so there's no measured retrieval failure to fix.
+
 ### 3. Frontend (Phase 3)
 
 ```bash
