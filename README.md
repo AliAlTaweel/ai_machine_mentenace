@@ -1,14 +1,15 @@
 # Industrial Machinery Maintenance & Diagnostics Agent
 
 A portfolio/demo project: a factory technician reports a machine error (text
-or PDF log), and an agentic AI system diagnoses the fault via RAG over
+or PDF log), and a LangGraph pipeline diagnoses the fault via RAG over
 technical manuals, checks spare-parts inventory through an MCP server,
 pauses for human approval when parts must be ordered, and generates a work
 order on approval.
 
-This is a demo, not a production tool — it exists to showcase an agentic AI
-architecture: a LangGraph state machine, RAG, MCP tool use, human-in-the-loop
-(HITL) pause/resume, and a live execution-graph visualization.
+This is a demo, not a production tool — it exists to showcase a single
+LLM-driven LangGraph state machine (not a multi-agent system) combining RAG,
+MCP tool use, human-in-the-loop (HITL) pause/resume, and a live
+execution-graph visualization.
 
 Full design spec: [`docs/superpowers/specs/2026-09-10-industrial-maintenance-agent-design.md`](docs/superpowers/specs/2026-09-10-industrial-maintenance-agent-design.md)
 
