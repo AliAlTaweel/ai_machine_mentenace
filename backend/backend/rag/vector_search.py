@@ -33,7 +33,11 @@ def ensure_vector_index(collection, dimensions: int = 384) -> bool:
                         "path": "embedding",
                         "numDimensions": dimensions,
                         "similarity": "cosine",
-                    }
+                    },
+                    {
+                        "type": "filter",
+                        "path": "machine_type",
+                    },
                 ]
             },
             name=VECTOR_INDEX_NAME,
@@ -43,17 +47,38 @@ def ensure_vector_index(collection, dimensions: int = 384) -> bool:
     return True
 
 
-def search_manuals(collection, query_embedding: list[float], top_k: int = 3) -> list[dict]:
-    pipeline = [
-        {
-            "$vectorSearch": {
-                "index": VECTOR_INDEX_NAME,
-                "path": "embedding",
-                "queryVector": query_embedding,
-                "numCandidates": max(top_k * 10, 50),
-                "limit": top_k,
-            }
-        },
+def _build_pipeline(query_embedding: list[float], top_k: int, machine_type: str | None) -> list[dict]:
+    vector_search_stage = {
+        "index": VECTOR_INDEX_NAME,
+        "path": "embedding",
+        "queryVector": query_embedding,
+        "numCandidates": max(top_k * 10, 50),
+        "limit": top_k,
+    }
+    if machine_type:
+        vector_search_stage["filter"] = {"machine_type": machine_type}
+    return [
+        {"$vectorSearch": vector_search_stage},
         {"$project": {"_id": 0, "chunk_text": 1, "machine_type": 1, "error_codes": 1}},
     ]
-    return list(collection.aggregate(pipeline))
+
+
+def search_manuals(
+    collection,
+    query_embedding: list[float],
+    top_k: int = 3,
+    machine_type: str | None = None,
+) -> list[dict]:
+    """Search manual chunks by vector similarity, optionally narrowed to a
+    machine_type.
+
+    machine_id (chat-extracted) and machine_type (upload-provided) are both
+    free text with no shared vocabulary, so the filter is best-effort: if it
+    matches nothing, fall back to an unfiltered search rather than let a
+    string mismatch surface as "no procedure found".
+    """
+    if machine_type:
+        filtered = list(collection.aggregate(_build_pipeline(query_embedding, top_k, machine_type)))
+        if filtered:
+            return filtered
+    return list(collection.aggregate(_build_pipeline(query_embedding, top_k, None)))

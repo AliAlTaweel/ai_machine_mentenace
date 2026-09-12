@@ -6,7 +6,7 @@ def fake_embed(text: str) -> list[float]:
 
 
 def test_rag_lookup_node_returns_diagnosis_when_manual_found(fake_llm):
-    def fake_search(collection, query_embedding, top_k=3):
+    def fake_search(collection, query_embedding, top_k=3, machine_type=None):
         return [{"chunk_text": "bearing wear procedure", "machine_type": "CNC-Mill-200", "error_codes": ["E101"]}]
 
     llm = fake_llm(structured_responses=[
@@ -35,7 +35,7 @@ def test_rag_lookup_node_embeds_machine_id_and_error_code_with_description(fake_
         captured["text"] = text
         return [0.1, 0.2]
 
-    def fake_search(collection, query_embedding, top_k=3):
+    def fake_search(collection, query_embedding, top_k=3, machine_type=None):
         return [{"chunk_text": "bearing wear procedure", "machine_type": "CNC-Mill-200", "error_codes": ["E101"]}]
 
     llm = fake_llm(
@@ -57,7 +57,7 @@ def test_rag_lookup_node_embeds_machine_id_and_error_code_with_description(fake_
 
 
 def test_rag_lookup_node_reports_no_procedure_found_when_no_chunks(fake_llm):
-    def fake_search(collection, query_embedding, top_k=3):
+    def fake_search(collection, query_embedding, top_k=3, machine_type=None):
         return []
 
     llm = fake_llm()  # generate_structured should never be called

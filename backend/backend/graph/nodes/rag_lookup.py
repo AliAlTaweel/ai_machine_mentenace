@@ -30,7 +30,12 @@ def make_rag_lookup_node(
     def rag_lookup_node(state: GraphState) -> dict:
         query_text = f"{state['machine_id']} {state['error_code']} {state['error_description']}"
         query_embedding = embed_fn(query_text)
-        chunks = search_fn(manuals_collection, query_embedding, top_k=3)
+        chunks = search_fn(
+            manuals_collection,
+            query_embedding,
+            top_k=3,
+            machine_type=state["machine_id"],
+        )
 
         if not chunks:
             return {

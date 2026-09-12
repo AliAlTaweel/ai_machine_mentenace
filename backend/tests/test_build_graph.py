@@ -48,7 +48,7 @@ async def test_graph_completes_without_approval_when_parts_in_stock(fake_llm, mo
 
     monkeypatch.setattr("backend.graph.build.check_stock", fake_check_stock)
     monkeypatch.setattr("backend.graph.build.reserve_parts", fake_reserve_parts)
-    monkeypatch.setattr("backend.graph.build.search_manuals", lambda collection, query_embedding, top_k=3: [
+    monkeypatch.setattr("backend.graph.build.search_manuals", lambda collection, query_embedding, top_k=3, machine_type=None: [
         {"chunk_text": "bearing wear procedure", "machine_type": "CNC-Mill-200", "error_codes": ["E101"]}
     ])
     monkeypatch.setattr("backend.graph.build.embed_text", lambda text: [0.1, 0.2])
@@ -89,7 +89,7 @@ async def test_graph_pauses_for_approval_and_resumes_when_approved(fake_llm, mon
 
     monkeypatch.setattr("backend.graph.build.check_stock", fake_check_stock)
     monkeypatch.setattr("backend.graph.build.reserve_parts", fake_reserve_parts)
-    monkeypatch.setattr("backend.graph.build.search_manuals", lambda collection, query_embedding, top_k=3: [
+    monkeypatch.setattr("backend.graph.build.search_manuals", lambda collection, query_embedding, top_k=3, machine_type=None: [
         {"chunk_text": "valve failure procedure", "machine_type": "Hydraulic-Press-9", "error_codes": ["H33"]}
     ])
     monkeypatch.setattr("backend.graph.build.embed_text", lambda text: [0.1, 0.2])
@@ -142,7 +142,7 @@ async def test_graph_marks_rejected_when_approval_denied(fake_llm, monkeypatch):
 
     monkeypatch.setattr("backend.graph.build.check_stock", fake_check_stock)
     monkeypatch.setattr("backend.graph.build.reserve_parts", fake_reserve_parts)
-    monkeypatch.setattr("backend.graph.build.search_manuals", lambda collection, query_embedding, top_k=3: [
+    monkeypatch.setattr("backend.graph.build.search_manuals", lambda collection, query_embedding, top_k=3, machine_type=None: [
         {"chunk_text": "valve failure procedure", "machine_type": "Hydraulic-Press-9", "error_codes": ["H33"]}
     ])
     monkeypatch.setattr("backend.graph.build.embed_text", lambda text: [0.1, 0.2])

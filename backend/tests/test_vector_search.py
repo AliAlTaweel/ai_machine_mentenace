@@ -61,6 +61,44 @@ def test_search_manuals_returns_empty_list_when_no_matches():
     assert search_manuals(collection, query_embedding=[0.1], top_k=3) == []
 
 
+def test_search_manuals_applies_machine_type_filter_when_matches_found():
+    fake_docs = [
+        {"chunk_text": "bearing wear procedure", "machine_type": "CNC-Mill-200", "error_codes": ["E101"]},
+    ]
+    collection = FakeManualsCollection(fake_docs)
+
+    results = search_manuals(collection, query_embedding=[0.1], top_k=3, machine_type="CNC-Mill-200")
+
+    assert results == fake_docs
+    stage = collection.last_pipeline[0]["$vectorSearch"]
+    assert stage["filter"] == {"machine_type": "CNC-Mill-200"}
+
+
+def test_search_manuals_falls_back_to_unfiltered_when_filter_matches_nothing():
+    """machine_id (chat-extracted) and machine_type (upload-provided) are free
+    text with no shared vocabulary, so a filter that matches nothing must not
+    be treated as "no procedure exists" — fall back to an unfiltered search."""
+
+    class SequencedCollection:
+        def __init__(self, results_by_call):
+            self._results_by_call = list(results_by_call)
+            self.pipelines = []
+
+        def aggregate(self, pipeline):
+            self.pipelines.append(pipeline)
+            return iter(self._results_by_call.pop(0))
+
+    fake_docs = [{"chunk_text": "generic procedure", "machine_type": "Other-Machine", "error_codes": ["E101"]}]
+    collection = SequencedCollection([[], fake_docs])
+
+    results = search_manuals(collection, query_embedding=[0.1], top_k=3, machine_type="Unknown-Machine")
+
+    assert results == fake_docs
+    assert len(collection.pipelines) == 2
+    assert collection.pipelines[0][0]["$vectorSearch"]["filter"] == {"machine_type": "Unknown-Machine"}
+    assert "filter" not in collection.pipelines[1][0]["$vectorSearch"]
+
+
 def test_ensure_vector_index_creates_index_when_missing():
     collection = FakeSearchIndexCollection(existing_index_names=[])
 
@@ -73,6 +111,7 @@ def test_ensure_vector_index_creates_index_when_missing():
     assert document["type"] == "vectorSearch"
     assert document["definition"]["fields"][0]["numDimensions"] == 384
     assert document["definition"]["fields"][0]["path"] == "embedding"
+    assert {"type": "filter", "path": "machine_type"} in document["definition"]["fields"]
 
 
 def test_ensure_vector_index_skips_when_already_present():
