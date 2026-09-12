@@ -240,6 +240,10 @@ cd frontend && npm test
 No CI workflow is configured yet (`.github/workflows/` doesn't exist) — run
 the suites above locally before pushing.
 
+The backend suite includes a retrieval-quality eval harness
+(`backend/tests/test_retrieval_eval.py`) that scores recall@3 against the
+seeded manuals — see [Retrieval quality](#retrieval-quality) for details.
+
 ## Author
 
 [AliAlTaweel](https://github.com/AliAlTaweel)
