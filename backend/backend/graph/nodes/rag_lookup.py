@@ -52,9 +52,15 @@ def make_rag_lookup_node(
         )
         result = llm.generate_structured(prompt, DiagnosisResult)
 
+        diagnosis = (
+            "No relevant repair procedure was found in the technical manuals for this error."
+            if result.no_procedure_found and not result.diagnosis.strip()
+            else result.diagnosis
+        )
+
         return {
             "no_procedure_found": result.no_procedure_found,
-            "diagnosis": result.diagnosis,
+            "diagnosis": diagnosis,
             "repair_steps": result.repair_steps,
             "required_parts": [p.model_dump() for p in result.required_parts],
         }
