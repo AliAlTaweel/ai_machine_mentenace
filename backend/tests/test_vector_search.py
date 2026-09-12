@@ -99,6 +99,32 @@ def test_search_manuals_falls_back_to_unfiltered_when_filter_matches_nothing():
     assert "filter" not in collection.pipelines[1][0]["$vectorSearch"]
 
 
+def test_search_manuals_falls_back_to_unfiltered_when_filter_raises():
+    """Atlas raises a PlanExecutor error (rather than returning empty) when
+    the filter targets a field the index predates — e.g. an index created
+    before machine_type became a filter field. That must fall back too, not
+    just the empty-results case."""
+
+    class RaisingThenSucceedingCollection:
+        def __init__(self, results):
+            self._results = results
+            self.pipelines = []
+
+        def aggregate(self, pipeline):
+            self.pipelines.append(pipeline)
+            if "filter" in pipeline[0]["$vectorSearch"]:
+                raise Exception("PlanExecutor error :: Path 'machine_type' needs to be indexed as filter")
+            return iter(self._results)
+
+    fake_docs = [{"chunk_text": "procedure", "machine_type": "CNC-Mill-200", "error_codes": ["E101"]}]
+    collection = RaisingThenSucceedingCollection(fake_docs)
+
+    results = search_manuals(collection, query_embedding=[0.1], top_k=3, machine_type="CNC-Mill-200")
+
+    assert results == fake_docs
+    assert len(collection.pipelines) == 2
+
+
 def test_ensure_vector_index_creates_index_when_missing():
     collection = FakeSearchIndexCollection(existing_index_names=[])
 

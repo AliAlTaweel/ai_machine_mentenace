@@ -76,6 +76,31 @@ describe('App', () => {
     expect(sentFrame).toMatchObject({ type: 'chat', content: 'bearing is grinding' });
   });
 
+  it('starts a fresh thread and clears prior messages when New Session is clicked', async () => {
+    render(<App />);
+    await userEvent.click(screen.getByRole('button', { name: 'Start Session' }));
+    act(() => {
+      FakeWebSocket.instances[0].onopen?.();
+    });
+
+    const input = screen.getByPlaceholderText('Describe the error...');
+    await userEvent.type(input, 'weird noise, part might be broken');
+    await userEvent.click(screen.getByRole('button', { name: 'Send' }));
+    expect(screen.getByText('weird noise, part might be broken')).toBeInTheDocument();
+
+    const firstThreadUrl = FakeWebSocket.instances[0].url;
+
+    await userEvent.click(screen.getByRole('button', { name: 'New Session' }));
+    expect(screen.getByRole('button', { name: 'Start Session' })).toBeInTheDocument();
+    expect(screen.queryByText('weird noise, part might be broken')).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Start Session' }));
+
+    expect(FakeWebSocket.instances).toHaveLength(2);
+    expect(FakeWebSocket.instances[1].url).not.toBe(firstThreadUrl);
+    expect(screen.queryByText('weird noise, part might be broken')).not.toBeInTheDocument();
+  });
+
   it('opens the manuals panel from Settings and closes it', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => [] }));
     render(<App />);

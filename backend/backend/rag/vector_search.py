@@ -75,10 +75,17 @@ def search_manuals(
     machine_id (chat-extracted) and machine_type (upload-provided) are both
     free text with no shared vocabulary, so the filter is best-effort: if it
     matches nothing, fall back to an unfiltered search rather than let a
-    string mismatch surface as "no procedure found".
+    string mismatch surface as "no procedure found". The filtered attempt can
+    also raise instead of returning empty — e.g. Atlas rejects the `filter`
+    clause with a PlanExecutor error if the index predates the `machine_type`
+    filter field (see `ensure_vector_index`) — so that's caught too rather
+    than only handling the empty-result case.
     """
     if machine_type:
-        filtered = list(collection.aggregate(_build_pipeline(query_embedding, top_k, machine_type)))
+        try:
+            filtered = list(collection.aggregate(_build_pipeline(query_embedding, top_k, machine_type)))
+        except Exception:
+            filtered = []
         if filtered:
             return filtered
     return list(collection.aggregate(_build_pipeline(query_embedding, top_k, None)))

@@ -103,6 +103,7 @@ export interface SessionState {
   addSystemMessage: (content: string) => void;
   handleServerEvent: (event: ServerEvent) => void;
   setApprovalDecision: (decision: 'approve' | 'reject') => void;
+  resetSession: () => void;
 }
 
 export const useSessionStore = create<SessionState>((set) => ({
@@ -216,6 +217,17 @@ export const useSessionStore = create<SessionState>((set) => ({
         }
       }
       return { messages, pendingApproval: null };
+    });
+  },
+
+  resetSession: () => {
+    set({
+      messages: [],
+      nodeStatus: initialNodeStatus(),
+      activeNode: null,
+      pendingApproval: null,
+      toolCallLog: [],
+      connectionStatus: 'connecting',
     });
   },
 }));
